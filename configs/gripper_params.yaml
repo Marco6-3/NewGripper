@@ -1,8 +1,12 @@
-# NewGripper 物理建模、CAD 校核与仿真 Co-Design 核心参数配置
-# 单位约定：SI 制为主（m, kg, N, Pa, rad），注释中给出工程常用 mm / deg / MPa 参考
+# NewGripper 物理建模、YUBI 魔改 CAD 校核与仿真核心参数配置
+# 单位约定：SI 制为主，字段后缀明确标注工程单位 (_mm, _deg, _GPa, _MPa, _Hz)
 
 project:
-  name: "NewGripper-ThinSheet"
+  name: "NewGripper-ScreenProtector-Wafer"
+  flagship_demo: "Transparent Screen Protector Apply -> Squeegee -> 0.2mm Edge-Lift -> Fracture-Safe Peel"
+  generalization_demos:
+    - "Fragile Silicon Wafer Lossless Scraping & Tweezers Handling"
+    - "Electronic Snap-Fit Case Prying with Internal Wafer Overshoot Protection"
   target_venue: "ICRA 2028 (stretch: CoRL 2027)"
   budget_rmb: 20000
 
@@ -12,99 +16,92 @@ robot_host:
   arm_repeatability_mm: 0.05
   mobile_base_docking_error_mm: 10.0
   wrist_ft_included: true
-  wrist_ft_noise_floor_N: 0.3       # 工业级大六维力典型底噪，说明为何必须加指尖微传感
+  wrist_ft_noise_floor_N: 0.3         # 腕部大六维力专测贴屏/贴桌宏观外力与剥离张力（测不到夹持内力）
   flange_standard: "ISO-9409-1-50-4-M6"
+  edge_compute: "NVIDIA DGX Spark 128GB"
+  train_compute: "Multi-GPU A100"
 
-off_the_shelf_base:
-  gripper_candidate: "DH-Robotics PGE-50-40 / AG-95 (or equivalent)"
-  stroke_mm: [0.0, 50.0]            # 若选 AG-95 则为 95 mm
-  repeatability_mm: 0.02
-  estimated_mass_kg: 0.65
-  tactile_sensor_candidate: "GelSight Mini / DIGIT"
-  tactile_body_approx_mm: [32.0, 28.0, 30.0]  # 导入官方 STEP 后以实际尺寸替换
-  micro_roller_actuator: "Dynamixel XL330-M288-T"
-  micro_roller_mass_kg: 0.018
-  wrist_camera: "Intel RealSense D405"
-  wrist_camera_min_depth_mm: 70.0
+embodiment_free_rig:
+  base_repo: "https://github.com/toyota/yubi-hw"
+  software_repo: "https://github.com/airoa-org/yubi-sw"
+  tactile_mount_reference: "https://github.com/actuated-umi/actuated-umi-gripper"
+  tracking: "Meta Quest 3S VR 6-DOF (抗玻璃屏镜面反光，不依赖桌面 SLAM)"
+  mcu_and_encoder: "Seeed XIAO ESP32-C6 + AS5601 magnetic encoder"
+  active_dof: 1                       # 首版严格 1 开合 DOF + 6-DOF 手腕；右指预留快换升级位
+  physical_tip_swapping: true         # 两端物理拆装共用同一对实体指尖/听诊盒（圆销+菱形销定位）
+  visual_hand_masking: true           # 借鉴 Flash ALOHA：轻量化遮手挡板 + 黑手套/Masking
 
-# 仿生指甲-指腹核心机械参数（也是后续 Co-Design 的主要优化变量 phi）
-bionic_nail_design:
-  # 候选弹性片材库
+deployment_gripper_base:
+  # 二选一：工业高刚度电爪（强推，适合稳夹撬棒/刮板）或 YUBI 官方 XM430 部署爪
+  option_a_industrial: "DH-Robotics PGE-50-40 / AG-95 (repeatability ±0.02 mm)"
+  option_b_yubi_native: "YUBI Gripper with Dynamixel XM430-W350-R"
+  tactile_sensor: "GelSight Mini (single-side, ~32x28x30 mm, 25 fps)"
+  wrist_camera: "Intel RealSense D405 (70~500 mm ultra-close depth + RGB)"
+
+# 声-振-力听诊耦合工具盒参数（核心 30% 机电创新）
+tool_stethoscope_cartridge:
+  tool_agnostic: true                 # 夹持任意 5 元普通薄钢撬片/硅胶刮板/金属撬棒/尖镊子，工具零改装
+  vibration_isolation_pad: "Sorbothane / butyl rubber damper between cartridge and gripper jaw"
+  acoustic_coupling_block: "7075/6061 Aluminum hard-coupled to tool shank"
+  target_motor_isolation_snr_dB: 15.0
+
+# 弹性薄钢撬片 / 刮刀参数库（用于 0.2mm 盲缝撬边与脆硅片无损铲取）
+pry_blade_library:
   materials:
     spring_steel_301_full_hard:
       youngs_modulus_GPa: 193.0
-      yield_strength_MPa: 900.0     # 保守取值（全硬 301 常见 900~1200 MPa）
+      yield_strength_MPa: 900.0
       friction_on_glass: 0.15
-      friction_on_card: 0.18
     carbon_fiber_sheet:
-      youngs_modulus_GPa: 70.0      # 准各向同性铺层等效弯曲模量估算
+      youngs_modulus_GPa: 70.0
       yield_strength_MPa: 450.0
       friction_on_glass: 0.18
-      friction_on_card: 0.20
-    peek_sheet:
+    peek_blade:
       youngs_modulus_GPa: 3.8
       yield_strength_MPa: 95.0
       friction_on_glass: 0.20
-      friction_on_card: 0.22
 
-  # 默认初版 CAD 设计参数（先通过 nail_mechanics_check.py 与仿真验证）
   default_candidate:
     material: "spring_steel_301_full_hard"
-    width_mm: 12.0                  # 指甲宽度 b
-    free_length_mm: 12.0            # 悬臂自由伸出长度 L
-    thickness_mm: 0.20              # 弹片厚度 t（核心刚度杠杆，t^3 敏感！）
-    preset_tilt_deg: 22.0           # 指座预设斜角 alpha_0
-    tip_wedge_angle_deg: 18.0       # 前缘倒角/削尖楔角 beta
-    target_z_compliance_mm: [0.3, 0.8]  # 期望在 1~3 N 法向力下吸收的 Z 轴贴桌误差范围
+    width_mm: 12.0
+    free_length_mm: 12.0
+    thickness_mm: 0.20                # 2N 下压挠度 0.75mm, SF=3.00, MuJoCo k_theta=0.386 Nm/rad
+    wrist_tilt_deg: 38.0              # 高倾角抬高电爪与 GelSight 外壳防磕手机屏
+    blade_wedge_angle_deg: 18.0       # 撬片前缘预设弯折成浅贴屏楔角
 
-  # Co-Design 仿真联合优化搜索范围
-  codesign_search_space:
-    width_mm: [8.0, 18.0]
-    free_length_mm: [8.0, 18.0]
-    thickness_mm: [0.12, 0.35]
-    preset_tilt_deg: [15.0, 32.0]
-    pad_friction_mu: [0.7, 1.5]
-    pad_shore_hardness: ["00-30", "10A", "30A"]
-
-# 传感采样频率与时间同步目标
+# 四层严格解耦感知采样率（ROS 2 统一对时至 DGX Spark）
 sensing_stack:
-  wrist_ft_hz: 500
-  nail_strain_and_pvdf_hz: 1000     # 严禁使用 80Hz HX711，需 INA 仪放 + Teensy/高速DAQ
-  tactile_vision_hz: 30
-  wrist_rgbd_hz: 30
-  control_loop_hz: 100
+  wrist_ft_hz: 500                    # 宏观贴屏下压力、赶泡压力、揭膜剥离张力
+  blade_strain_gauge_hz: 1000         # 静态/准静态悬臂弯曲载荷（严禁使用 80Hz HX711）
+  tool_acoustic_vib_hz: 24000         # 20~48 kHz 宽带接触声振/压电：空滑/进缝/脆裂前兆/卡扣突跳/H_tool(w)
+  tactile_vision_hz: 25               # GelSight Mini：透明膜捏持、边界对齐、局部滑移
+  wrist_rgbd_hz: 30                   # RealSense D405
+  mid_level_policy_hz: 30             # 触觉-声振条件化动作策略
+  high_freq_safety_scorer_hz: 250     # 200~500 Hz 临界过程打分与 <5ms 卸力/退让反射护栏
 
-# 仿真与真机测试用的标准极薄物体集合（OOD 物理属性跨度）
-thin_sheets_benchmark:
-  playing_card_standard:
-    size_mm: [88.0, 63.0, 0.30]
-    mass_g: 1.8
-    effective_youngs_GPa: 3.5       # 纸塑复合扑克牌等效弯曲模量量级
-    sheet_to_sheet_mu: [0.25, 0.45]
-  credit_card_pvc:
-    size_mm: [85.6, 54.0, 0.76]
-    mass_g: 5.0
-    effective_youngs_GPa: 2.8       # 厚度 0.76 mm 使弯曲刚度 EI 比扑克牌高 ~13 倍！
-    sheet_to_sheet_mu: [0.20, 0.35]
-  a4_paper_cut:
-    size_mm: [100.0, 70.0, 0.10]
-    mass_g: 0.56
-    effective_youngs_GPa: 4.0       # 极薄，极易屈曲起拱与静电双张粘连
-    sheet_to_sheet_mu: [0.40, 0.70]
-  thin_plastic_film:
-    size_mm: [90.0, 65.0, 0.05]
-    mass_g: 0.30
-    effective_youngs_GPa: 0.5
-    sheet_to_sheet_mu: [0.60, 1.10]
-
-# 测试桌面摩擦跨度（决定物理手法切换的核心隐变量）
-table_surfaces:
-  tempered_glass:
-    mu_range: [0.10, 0.20]
-    expected_mode: "anchor_and_nail_wedge"
-  finished_wood:
-    mu_range: [0.30, 0.50]
-    expected_mode: "hybrid_buckle_or_wedge"
-  silicone_or_felt_mat:
-    mu_range: [0.65, 1.10]
-    expected_mode: "compression_buckling"
+# 旗舰任务与脆性泛化对象真实物理参数（用于断裂力学防碎约束与仿真）
+fragile_targets_benchmark:
+  pet_soft_screen_protector:
+    size_mm: [145.0, 68.0, 0.15]
+    youngs_modulus_GPa: 3.0
+    yield_or_fracture_MPa: 60.0       # 极易起皱，不脆断，R_min ≈ 3.75 mm
+    failure_mode: "creasing_and_bubbles"
+  tempered_glass_protector:
+    size_mm: [145.0, 68.0, 0.30]
+    youngs_modulus_GPa: 70.0
+    yield_or_fracture_MPa: 300.0      # 化学钢化玻璃典型弯曲断裂强度 250~350 MPa -> R_min ≈ 35 mm (安全线 >= 70 mm)
+    failure_mode: "edge_chipping_and_spiderweb_fracture"
+  lab_silicon_wafer_thin:
+    size_mm: [50.0, 50.0, 0.20]
+    youngs_modulus_GPa: 160.0
+    yield_or_fracture_MPa: 150.0      # 极脆 -> R_min ≈ 107 mm，几乎不可弯折，必须极低楔角平铲！
+    failure_mode: "catastrophic_brittle_shatter"
+  lab_silicon_wafer_standard:
+    size_mm: [100.0, 100.0, 0.50]
+    youngs_modulus_GPa: 160.0
+    yield_or_fracture_MPa: 150.0      # R_min ≈ 267 mm，纯脆性刚片
+    failure_mode: "catastrophic_brittle_shatter"
+  electronic_snap_fit_case:
+    snap_peak_force_N: [8.0, 15.0]
+    snap_release_duration_ms: 5.0     # 崩开瞬间阻力骤降至 0，后方 3 mm 处放置脆硅片测试防过冲
+    internal_wafer_clearance_mm: 3.0
