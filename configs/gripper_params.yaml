@@ -1,0 +1,110 @@
+# NewGripper 物理建模、CAD 校核与仿真 Co-Design 核心参数配置
+# 单位约定：SI 制为主（m, kg, N, Pa, rad），注释中给出工程常用 mm / deg / MPa 参考
+
+project:
+  name: "NewGripper-ThinSheet"
+  target_venue: "ICRA 2028 (stretch: CoRL 2027)"
+  budget_rmb: 20000
+
+robot_host:
+  # 来自实验室采购候选（节卡 Kargo10/50/S3 或新松多可复合臂）
+  arm_payload_kg_min: 5.0
+  arm_repeatability_mm: 0.05
+  mobile_base_docking_error_mm: 10.0
+  wrist_ft_included: true
+  wrist_ft_noise_floor_N: 0.3       # 工业级大六维力典型底噪，说明为何必须加指尖微传感
+  flange_standard: "ISO-9409-1-50-4-M6"
+
+off_the_shelf_base:
+  gripper_candidate: "DH-Robotics PGE-50-40 / AG-95 (or equivalent)"
+  stroke_mm: [0.0, 50.0]            # 若选 AG-95 则为 95 mm
+  repeatability_mm: 0.02
+  estimated_mass_kg: 0.65
+  tactile_sensor_candidate: "GelSight Mini / DIGIT"
+  tactile_body_approx_mm: [32.0, 28.0, 30.0]  # 导入官方 STEP 后以实际尺寸替换
+  micro_roller_actuator: "Dynamixel XL330-M288-T"
+  micro_roller_mass_kg: 0.018
+  wrist_camera: "Intel RealSense D405"
+  wrist_camera_min_depth_mm: 70.0
+
+# 仿生指甲-指腹核心机械参数（也是后续 Co-Design 的主要优化变量 phi）
+bionic_nail_design:
+  # 候选弹性片材库
+  materials:
+    spring_steel_301_full_hard:
+      youngs_modulus_GPa: 193.0
+      yield_strength_MPa: 900.0     # 保守取值（全硬 301 常见 900~1200 MPa）
+      friction_on_glass: 0.15
+      friction_on_card: 0.18
+    carbon_fiber_sheet:
+      youngs_modulus_GPa: 70.0      # 准各向同性铺层等效弯曲模量估算
+      yield_strength_MPa: 450.0
+      friction_on_glass: 0.18
+      friction_on_card: 0.20
+    peek_sheet:
+      youngs_modulus_GPa: 3.8
+      yield_strength_MPa: 95.0
+      friction_on_glass: 0.20
+      friction_on_card: 0.22
+
+  # 默认初版 CAD 设计参数（先通过 nail_mechanics_check.py 与仿真验证）
+  default_candidate:
+    material: "spring_steel_301_full_hard"
+    width_mm: 12.0                  # 指甲宽度 b
+    free_length_mm: 12.0            # 悬臂自由伸出长度 L
+    thickness_mm: 0.20              # 弹片厚度 t（核心刚度杠杆，t^3 敏感！）
+    preset_tilt_deg: 22.0           # 指座预设斜角 alpha_0
+    tip_wedge_angle_deg: 18.0       # 前缘倒角/削尖楔角 beta
+    target_z_compliance_mm: [0.3, 0.8]  # 期望在 1~3 N 法向力下吸收的 Z 轴贴桌误差范围
+
+  # Co-Design 仿真联合优化搜索范围
+  codesign_search_space:
+    width_mm: [8.0, 18.0]
+    free_length_mm: [8.0, 18.0]
+    thickness_mm: [0.12, 0.35]
+    preset_tilt_deg: [15.0, 32.0]
+    pad_friction_mu: [0.7, 1.5]
+    pad_shore_hardness: ["00-30", "10A", "30A"]
+
+# 传感采样频率与时间同步目标
+sensing_stack:
+  wrist_ft_hz: 500
+  nail_strain_and_pvdf_hz: 1000     # 严禁使用 80Hz HX711，需 INA 仪放 + Teensy/高速DAQ
+  tactile_vision_hz: 30
+  wrist_rgbd_hz: 30
+  control_loop_hz: 100
+
+# 仿真与真机测试用的标准极薄物体集合（OOD 物理属性跨度）
+thin_sheets_benchmark:
+  playing_card_standard:
+    size_mm: [88.0, 63.0, 0.30]
+    mass_g: 1.8
+    effective_youngs_GPa: 3.5       # 纸塑复合扑克牌等效弯曲模量量级
+    sheet_to_sheet_mu: [0.25, 0.45]
+  credit_card_pvc:
+    size_mm: [85.6, 54.0, 0.76]
+    mass_g: 5.0
+    effective_youngs_GPa: 2.8       # 厚度 0.76 mm 使弯曲刚度 EI 比扑克牌高 ~13 倍！
+    sheet_to_sheet_mu: [0.20, 0.35]
+  a4_paper_cut:
+    size_mm: [100.0, 70.0, 0.10]
+    mass_g: 0.56
+    effective_youngs_GPa: 4.0       # 极薄，极易屈曲起拱与静电双张粘连
+    sheet_to_sheet_mu: [0.40, 0.70]
+  thin_plastic_film:
+    size_mm: [90.0, 65.0, 0.05]
+    mass_g: 0.30
+    effective_youngs_GPa: 0.5
+    sheet_to_sheet_mu: [0.60, 1.10]
+
+# 测试桌面摩擦跨度（决定物理手法切换的核心隐变量）
+table_surfaces:
+  tempered_glass:
+    mu_range: [0.10, 0.20]
+    expected_mode: "anchor_and_nail_wedge"
+  finished_wood:
+    mu_range: [0.30, 0.50]
+    expected_mode: "hybrid_buckle_or_wedge"
+  silicone_or_felt_mat:
+    mu_range: [0.65, 1.10]
+    expected_mode: "compression_buckling"

@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+*.egg-info/
+
+# CAD temporary / lock files
+~$*
+*.bak
+*.tmp
+*.log
+
+# Large simulation / dataset outputs
+outputs/
+logs/
+wandb/
+*.mp4
+*.bag
+*.mcap
+*.h5
+*.hdf5
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
